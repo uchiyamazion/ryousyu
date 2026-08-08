@@ -460,6 +460,43 @@
 </div>
 
 <script>
+// Claudeのアーティファクト内では window.storage が使えるが、
+// GitHub Pagesなど外部サイトでは存在しないため、
+// その場合はブラウザ標準の localStorage にフォールバックする。
+const storageAdapter = (function(){
+  const hasClaudeStorage = (typeof window.storage !== 'undefined') && window.storage
+    && typeof window.storage.get === 'function';
+
+  if(hasClaudeStorage){
+    return window.storage;
+  }
+  // localStorage フォールバック実装（window.storage と同じインターフェース）
+  return {
+    async get(key, shared){
+      const raw = localStorage.getItem(key);
+      if(raw === null){ throw new Error('key not found: ' + key); }
+      return { key, value: raw, shared: !!shared };
+    },
+    async set(key, value, shared){
+      localStorage.setItem(key, value);
+      return { key, value, shared: !!shared };
+    },
+    async delete(key, shared){
+      localStorage.removeItem(key);
+      return { key, deleted: true, shared: !!shared };
+    },
+    async list(prefix, shared){
+      const keys = [];
+      for(let i=0;i<localStorage.length;i++){
+        const k = localStorage.key(i);
+        if(!prefix || k.startsWith(prefix)) keys.push(k);
+      }
+      return { keys, prefix, shared: !!shared };
+    }
+  };
+})();
+</script>
+<script>
 let suffix = '様';
 let taxMode = 'incl';
 let issued = false;
@@ -599,7 +636,7 @@ async function recordToHistory(){
   try{
     let list = [];
     try{
-      const existing = await window.storage.get(HISTORY_KEY, false);
+      const existing = await storageAdapter.get(HISTORY_KEY, false);
       if(existing && existing.value) list = JSON.parse(existing.value);
     } catch(e){ /* 履歴なしの場合は無視 */ }
 
@@ -609,7 +646,7 @@ async function recordToHistory(){
     list.unshift(record);
     if(list.length > 200) list = list.slice(0, 200);
 
-    await window.storage.set(HISTORY_KEY, JSON.stringify(list), false);
+    await storageAdapter.set(HISTORY_KEY, JSON.stringify(list), false);
     renderHistory(list);
   } catch(err){
     console.error('履歴の保存に失敗しました:', err);
@@ -618,7 +655,7 @@ async function recordToHistory(){
 
 async function loadHistory(){
   try{
-    const result = await window.storage.get(HISTORY_KEY, false);
+    const result = await storageAdapter.get(HISTORY_KEY, false);
     const list = (result && result.value) ? JSON.parse(result.value) : [];
     renderHistory(list);
   } catch(err){
@@ -650,7 +687,7 @@ function renderHistory(list){
 
 async function loadFromHistory(no){
   try{
-    const result = await window.storage.get(HISTORY_KEY, false);
+    const result = await storageAdapter.get(HISTORY_KEY, false);
     const list = (result && result.value) ? JSON.parse(result.value) : [];
     const r = list.find(item => item.no === no);
     if(!r) return;
@@ -694,10 +731,10 @@ async function loadFromHistory(no){
 
 async function deleteHistoryItem(no){
   try{
-    const result = await window.storage.get(HISTORY_KEY, false);
+    const result = await storageAdapter.get(HISTORY_KEY, false);
     let list = (result && result.value) ? JSON.parse(result.value) : [];
     list = list.filter(r => r.no !== no);
-    await window.storage.set(HISTORY_KEY, JSON.stringify(list), false);
+    await storageAdapter.set(HISTORY_KEY, JSON.stringify(list), false);
     renderHistory(list);
   } catch(err){
     console.error('履歴の削除に失敗しました:', err);
@@ -707,7 +744,7 @@ async function deleteHistoryItem(no){
 async function clearHistory(){
   if(!confirm('発行履歴をすべて削除します。よろしいですか？')) return;
   try{
-    await window.storage.delete(HISTORY_KEY, false);
+    await storageAdapter.delete(HISTORY_KEY, false);
     renderHistory([]);
   } catch(err){
     console.error('履歴の全削除に失敗しました:', err);
@@ -782,7 +819,7 @@ async function saveIssuerProfile(){
   };
   const status = $('issuerSaveStatus');
   try{
-    const result = await window.storage.set(ISSUER_KEY, JSON.stringify(profile), false);
+    const result = await storageAdapter.set(ISSUER_KEY, JSON.stringify(profile), false);
     if(result){
       status.textContent = '保存しました。次回このアプリを開いたときも自動で入力されます。';
     } else {
@@ -797,7 +834,7 @@ async function saveIssuerProfile(){
 async function clearIssuerProfile(){
   const status = $('issuerSaveStatus');
   try{
-    await window.storage.delete(ISSUER_KEY, false);
+    await storageAdapter.delete(ISSUER_KEY, false);
     status.textContent = '保存済みの発行者情報を削除しました。';
   } catch(err){
     console.error('削除エラー:', err);
@@ -808,7 +845,7 @@ async function clearIssuerProfile(){
 async function loadIssuerProfile(){
   const status = $('issuerSaveStatus');
   try{
-    const result = await window.storage.get(ISSUER_KEY, false);
+    const result = await storageAdapter.get(ISSUER_KEY, false);
     if(result && result.value){
       const profile = JSON.parse(result.value);
       $('issuerName').value = profile.name || '';
