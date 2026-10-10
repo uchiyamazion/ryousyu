@@ -141,15 +141,17 @@
     border:1px solid var(--line-soft); pointer-events:none;
   }
   .r-head{
-    display:flex; justify-content:space-between; align-items:flex-start;
+    display:flex; flex-direction:column; gap:10px;
     margin-bottom:18px;
   }
   .r-title{
-    font-family:'Shippori Mincho',serif; font-weight:800; font-size:30px;
-    letter-spacing:.5em; padding-left:.5em;
+    font-family:'Shippori Mincho',serif; font-weight:800;
+    font-size:clamp(20px,6.5vw,30px);
+    letter-spacing:.3em; padding-left:.3em;
+    white-space:nowrap; overflow:hidden; text-overflow:clip;
     border-bottom:3px double var(--ink); padding-bottom:10px;
   }
-  .r-no{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); text-align:right;}
+  .r-no{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); text-align:left;}
   .r-no b{display:block; color:var(--ink-soft); font-size:13px; margin-bottom:2px;}
 
   .r-to-line{
@@ -266,6 +268,10 @@
   .history-head-row h2{margin:0;}
   .history-clear{font-size:11px; color:var(--muted); background:none; border:none; cursor:pointer; text-decoration:underline;}
   .history-clear:hover{color:var(--stamp);}
+
+  @media (max-width:480px){
+    .receipt-card{padding:26px 18px 22px;}
+  }
 
   @media print{
     body *{visibility:hidden;}
@@ -436,6 +442,7 @@
         <div class="btn-row">
           <button class="act primary" id="btnIssue" onclick="issueReceipt()">① 発行して確定（印を押す）</button>
           <button class="act ghost" id="btnNew" onclick="newDraft()">新規作成（次の1枚へ）</button>
+          <button class="act ghost" id="btnQuoteLast" onclick="quoteLastReceipt()">前回の内容を引用</button>
         </div>
         <div class="btn-row">
           <button class="act" id="btnPdf" onclick="exportPDF()" disabled>PDFを出力</button>
@@ -450,6 +457,7 @@
           <h2>発行履歴</h2>
           <button class="history-clear" type="button" onclick="clearHistory()">すべて削除</button>
         </div>
+        <div class="rec-guide" id="historyTotal" style="margin-bottom:12px;"></div>
         <div class="history-list" id="historyList">
           <div class="history-empty">まだ発行履歴はありません。「発行して確定」すると自動的にここへ記録されます。</div>
         </div>
@@ -471,6 +479,13 @@ const storageAdapter = (function(){
     return window.storage;
   }
   // localStorage フォールバック実装（window.storage と同じインターフェース）
+  try{
+    const testKey = '__storage_test__';
+    localStorage.setItem(testKey, '1');
+    localStorage.removeItem(testKey);
+  } catch(e){
+    console.warn('localStorageが使用できません（プライベートモード等の可能性）:', e);
+  }
   return {
     async get(key, shared){
       const raw = localStorage.getItem(key);
@@ -665,10 +680,21 @@ async function loadHistory(){
 
 function renderHistory(list){
   const box = $('historyList');
+  const totalBox = $('historyTotal');
+
   if(!list || list.length === 0){
     box.innerHTML = '<div class="history-empty">まだ発行履歴はありません。「発行して確定」すると自動的にここへ記録されます。</div>';
+    totalBox.textContent = '';
     return;
   }
+
+  const toNum = v => parseInt(String(v).replace(/[^0-9]/g,''), 10) || 0;
+  const grandTotal = list.reduce((sum, r) => sum + toNum(r.total), 0);
+  const nowYm = todayISO().slice(0,7); // YYYY-MM
+  const monthTotal = list
+    .filter(r => (r.issueDate || '').slice(0,7) === nowYm)
+    .reduce((sum, r) => sum + toNum(r.total), 0);
+  totalBox.innerHTML = `件数：${list.length}件　／　累計：<b style="color:var(--ink)">¥${fmtYen(grandTotal)}</b>　／　今月：<b style="color:var(--ink)">¥${fmtYen(monthTotal)}</b>`;
   const fmtLabel = { email:'メール添付', paper:'紙原本', cloud:'電子保存', print:'その場印刷' };
   box.innerHTML = list.map(r => `
     <div class="history-item" onclick="loadFromHistory('${r.no}')">
@@ -751,6 +777,36 @@ async function clearHistory(){
   }
 }
 
+async function quoteLastReceipt(){
+  try{
+    const result = await storageAdapter.get(HISTORY_KEY, false);
+    const list = (result && result.value) ? JSON.parse(result.value) : [];
+    if(list.length === 0){
+      alert('引用できる発行履歴がまだありません。');
+      return;
+    }
+    const r = list[0];
+    $('toName').value = r.toName;
+    suffix = r.suffix;
+    document.querySelectorAll('[data-suffix]').forEach(b=>{
+      b.classList.toggle('active', b.dataset.suffix === r.suffix);
+    });
+    $('amount').value = r.amount;
+    taxMode = r.taxMode;
+    document.querySelectorAll('[data-mode]').forEach(b=>{
+      b.classList.toggle('active', b.dataset.mode === r.taxMode);
+    });
+    $('taxRate').value = r.taxRate;
+    $('purpose').value = r.purpose;
+    selectFormat(r.format || 'email');
+    // 番号・発行日・発行済みステータスは新規のまま変更しない
+    update();
+  } catch(err){
+    console.error('前回の内容の引用に失敗しました:', err);
+    alert('前回の内容を引用できませんでした。');
+  }
+}
+
 function newDraft(){
   receiptNo = genReceiptNo();
   $('rNo').textContent = receiptNo;
@@ -827,7 +883,8 @@ async function saveIssuerProfile(){
     }
   } catch(err){
     console.error('保存エラー:', err);
-    status.textContent = '保存に失敗しました（通信エラー）。もう一度お試しください。';
+    status.textContent = '保存に失敗しました：' + (err && err.message ? err.message : String(err)) +
+      '　※プライベート/シークレットモードでは保存できない場合があります。';
   }
 }
 
