@@ -195,20 +195,61 @@
   .r-qr-cap{font-size:9px; color:var(--muted); text-align:center; margin-top:3px;}
 
   /* Hanko stamp */
+  @keyframes hankoStamp{
+    0%{ transform:rotate(-10deg) scale(2.4); opacity:0; }
+    55%{ transform:rotate(-7deg) scale(.88); opacity:1; }
+    72%{ transform:rotate(-9deg) scale(1.07); }
+    100%{ transform:rotate(-8deg) scale(1); opacity:1; }
+  }
   .hanko{
-    width:76px; height:76px; border-radius:50%;
-    border:3px solid var(--stamp); position:relative;
+    width:104px; height:104px; border-radius:50%;
+    border:4px solid var(--stamp); position:relative;
     display:flex; align-items:center; justify-content:center;
     color:var(--stamp); mix-blend-mode:multiply;
+    overflow:hidden;
+    background:
+      radial-gradient(circle at 38% 32%, rgba(162,51,31,.12), transparent 55%),
+      radial-gradient(circle at 65% 70%, rgba(124,39,23,.10), transparent 60%);
     transform:rotate(-9deg) scale(0);
     opacity:0;
-    transition:transform .5s cubic-bezier(.2,1.6,.4,1), opacity .3s;
+    filter:url(#inkRough);
+    box-shadow:inset 0 0 0 1px rgba(162,51,31,.25);
   }
-  .hanko.stamped{transform:rotate(-9deg) scale(1); opacity:.88;}
-  .hanko::before{content:""; position:absolute; inset:6px; border:1px solid var(--stamp); border-radius:50%;}
+  .hanko.stamped{
+    animation:hankoStamp .62s cubic-bezier(.25,1.9,.4,1) forwards;
+  }
+  .hanko::before{
+    content:""; position:absolute; inset:9px; border-radius:50%;
+    border:1.5px solid var(--stamp);
+    box-shadow:inset 0 0 0 1px rgba(162,51,31,.3);
+  }
+  .hanko::after{
+    content:""; position:absolute; inset:3px; border-radius:50%;
+    border:1px solid rgba(162,51,31,.55);
+  }
   .hanko-text{
-    font-family:'Shippori Mincho',serif; font-weight:700; font-size:12px;
-    writing-mode:vertical-rl; letter-spacing:.12em;
+    font-family:'Shippori Mincho',serif; font-weight:900;
+    writing-mode:vertical-rl; letter-spacing:.16em;
+    line-height:1; text-orientation:upright;
+    white-space:nowrap; max-height:78px;
+    text-shadow:
+      .6px 0 0 currentColor, -.6px 0 0 currentColor,
+      0 .6px 0 currentColor, 0 -.6px 0 currentColor;
+  }
+  .hanko-text[data-len="1"]{font-size:42px;}
+  .hanko-text[data-len="2"]{font-size:32px;}
+  .hanko-text[data-len="3"]{font-size:23px;}
+  .hanko-text[data-len="4"]{font-size:17px; letter-spacing:.08em;}
+
+  .ink-spark{
+    position:absolute; border-radius:50%; background:var(--stamp);
+    mix-blend-mode:multiply; pointer-events:none;
+    opacity:0; transform:scale(0);
+    animation:sparkOut .5s ease-out forwards;
+  }
+  @keyframes sparkOut{
+    0%{ opacity:.8; transform:scale(.3) translate(0,0); }
+    100%{ opacity:0; transform:scale(1) translate(var(--sx), var(--sy)); }
   }
 
   .unissued-note{
@@ -283,6 +324,20 @@
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="inkRough" x="-20%" y="-20%" width="140%" height="140%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" result="noise1"/>
+    <feDisplacementMap in="SourceGraphic" in2="noise1" scale="2.4" result="displaced"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="3" seed="11" result="blotch"/>
+    <feColorMatrix in="blotch" type="matrix"
+      values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.4 0.4 0.4 0 -0.35" result="blotchAlpha"/>
+    <feComposite in="displaced" in2="blotchAlpha" operator="in" result="patchy"/>
+    <feMerge>
+      <feMergeNode in="displaced"/>
+      <feMergeNode in="patchy"/>
+    </feMerge>
+  </filter>
+</svg>
 <div class="wrap">
 
   <header class="app-head">
@@ -408,7 +463,7 @@
               <div class="r-qr-cap">スキャンで内容確認</div>
             </div>
             <div class="hanko" id="hanko">
-              <div class="hanko-text" id="hankoText">受領印</div>
+              <div class="hanko-text" id="hankoText" data-len="2">受領</div>
             </div>
           </div>
         </div>
@@ -555,6 +610,22 @@ function fmtYen(n){
   return Math.round(n).toLocaleString('ja-JP');
 }
 
+function getHankoText(name){
+  if(!name) return '受領印'.slice(0,2);
+  let n = name.trim();
+  if(/[\s　]/.test(n)){
+    // 「姓 名」形式 → 姓のみを採用（実際の印鑑の慣習に合わせる）
+    n = n.split(/[\s　]+/)[0];
+  } else {
+    // 会社名 → 法人格の接頭・接尾辞を除去して要部のみ残す
+    n = n
+      .replace(/^(株式会社|有限会社|合同会社|合資会社|一般社団法人|公益社団法人|医療法人)/,'')
+      .replace(/(株式会社|有限会社|合同会社)$/,'');
+  }
+  n = n.trim();
+  return (n || '印').slice(0,3);
+}
+
 function update(){
   const name = $('toName').value.trim();
   $('rTo').textContent = name || 'お名前未入力';
@@ -587,8 +658,10 @@ function update(){
   $('rIssuerContact').innerHTML = $('issuerContact').value.trim() ? ($('issuerContact').value.trim() + '<br>') : '';
   $('rIssuerReg').textContent = $('issuerReg').value.trim() ? ('登録番号：' + $('issuerReg').value.trim()) : '';
 
-  const hname = ($('issuerName').value.trim() || '受領印').slice(0,4);
-  $('hankoText').textContent = hname;
+  const hname = getHankoText($('issuerName').value.trim());
+  const hankoEl = $('hankoText');
+  hankoEl.textContent = hname;
+  hankoEl.setAttribute('data-len', String(hname.length));
 
   if(issued){ generateQR(); }
 }
@@ -619,10 +692,33 @@ async function issueReceipt(){
   $('issueStatus').textContent = '発行済み';
   $('issueStatus').style.borderColor = 'var(--stamp)';
   $('issueStatus').style.color = 'var(--stamp)';
+  $('hanko').classList.remove('stamped');
+  void $('hanko').offsetWidth; // アニメーションを再トリガーするためのリフロー
   $('hanko').classList.add('stamped');
+  spawnInkSparks();
   ['btnPdf','btnQr','btnPrint'].forEach(id => $(id).disabled = false);
   generateQR();
   await recordToHistory();
+}
+
+function spawnInkSparks(){
+  const hanko = $('hanko');
+  const n = 7;
+  for(let i=0;i<n;i++){
+    const dot = document.createElement('div');
+    dot.className = 'ink-spark';
+    const size = 3 + Math.random()*4;
+    const angle = Math.random()*Math.PI*2;
+    const dist = 18 + Math.random()*22;
+    dot.style.width = size + 'px';
+    dot.style.height = size + 'px';
+    dot.style.left = (50 + Math.random()*20 - 10) + '%';
+    dot.style.top = (50 + Math.random()*20 - 10) + '%';
+    dot.style.setProperty('--sx', (Math.cos(angle)*dist) + 'px');
+    dot.style.setProperty('--sy', (Math.sin(angle)*dist) + 'px');
+    hanko.appendChild(dot);
+    setTimeout(() => dot.remove(), 550);
+  }
 }
 
 const HISTORY_KEY = 'receipt-history';
