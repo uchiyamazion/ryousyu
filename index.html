@@ -16,7 +16,6 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root{
     --paper:#F7F2E4;
@@ -190,67 +189,33 @@
   .r-issuer{font-size:12px; line-height:1.7; color:var(--ink-soft);}
   .r-issuer b{display:block; font-size:14px; color:var(--ink); font-family:'Shippori Mincho',serif; margin-bottom:2px;}
   .r-side{display:flex; align-items:flex-end; gap:14px;}
-  .r-qr{width:74px; height:74px; display:flex; align-items:center; justify-content:center; background:#fff; padding:4px; border:1px solid var(--line-soft);}
-  .r-qr img{width:100%; height:100%;}
-  .r-qr-cap{font-size:9px; color:var(--muted); text-align:center; margin-top:3px;}
 
   /* Hanko stamp */
-  @keyframes hankoStamp{
-    0%{ transform:rotate(-10deg) scale(2.4); opacity:0; }
-    55%{ transform:rotate(-7deg) scale(.88); opacity:1; }
-    72%{ transform:rotate(-9deg) scale(1.07); }
-    100%{ transform:rotate(-8deg) scale(1); opacity:1; }
-  }
   .hanko{
-    width:104px; height:104px; border-radius:50%;
-    border:4px solid var(--stamp); position:relative;
+    width:88px; height:88px; border-radius:50%;
+    border:3px solid var(--stamp); position:relative;
     display:flex; align-items:center; justify-content:center;
     color:var(--stamp); mix-blend-mode:multiply;
     overflow:hidden;
-    background:
-      radial-gradient(circle at 38% 32%, rgba(162,51,31,.12), transparent 55%),
-      radial-gradient(circle at 65% 70%, rgba(124,39,23,.10), transparent 60%);
-    transform:rotate(-9deg) scale(0);
+    transform:rotate(-8deg) scale(0);
     opacity:0;
-    filter:url(#inkRough);
-    box-shadow:inset 0 0 0 1px rgba(162,51,31,.25);
+    transition:transform .4s cubic-bezier(.2,1.5,.4,1), opacity .25s;
   }
-  .hanko.stamped{
-    animation:hankoStamp .62s cubic-bezier(.25,1.9,.4,1) forwards;
-  }
+  .hanko.stamped{transform:rotate(-8deg) scale(1); opacity:.9;}
   .hanko::before{
-    content:""; position:absolute; inset:9px; border-radius:50%;
-    border:1.5px solid var(--stamp);
-    box-shadow:inset 0 0 0 1px rgba(162,51,31,.3);
-  }
-  .hanko::after{
-    content:""; position:absolute; inset:3px; border-radius:50%;
-    border:1px solid rgba(162,51,31,.55);
+    content:""; position:absolute; inset:8px; border-radius:50%;
+    border:1px solid var(--stamp);
   }
   .hanko-text{
-    font-family:'Shippori Mincho',serif; font-weight:900;
-    writing-mode:vertical-rl; letter-spacing:.16em;
-    line-height:1; text-orientation:upright;
-    white-space:nowrap; max-height:78px;
-    text-shadow:
-      .6px 0 0 currentColor, -.6px 0 0 currentColor,
-      0 .6px 0 currentColor, 0 -.6px 0 currentColor;
+    font-family:'Shippori Mincho',serif; font-weight:700;
+    writing-mode:vertical-rl; letter-spacing:.14em;
+    line-height:1.05; text-orientation:upright;
+    white-space:nowrap; max-height:68px;
   }
-  .hanko-text[data-len="1"]{font-size:42px;}
-  .hanko-text[data-len="2"]{font-size:32px;}
-  .hanko-text[data-len="3"]{font-size:23px;}
-  .hanko-text[data-len="4"]{font-size:17px; letter-spacing:.08em;}
-
-  .ink-spark{
-    position:absolute; border-radius:50%; background:var(--stamp);
-    mix-blend-mode:multiply; pointer-events:none;
-    opacity:0; transform:scale(0);
-    animation:sparkOut .5s ease-out forwards;
-  }
-  @keyframes sparkOut{
-    0%{ opacity:.8; transform:scale(.3) translate(0,0); }
-    100%{ opacity:0; transform:scale(1) translate(var(--sx), var(--sy)); }
-  }
+  .hanko-text[data-len="1"]{font-size:36px;}
+  .hanko-text[data-len="2"]{font-size:27px;}
+  .hanko-text[data-len="3"]{font-size:19px;}
+  .hanko-text[data-len="4"]{font-size:15px; letter-spacing:.06em;}
 
   .unissued-note{
     position:absolute; top:14px; right:16px; font-size:10.5px; color:var(--muted);
@@ -324,20 +289,6 @@
 </style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute">
-  <filter id="inkRough" x="-20%" y="-20%" width="140%" height="140%">
-    <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" result="noise1"/>
-    <feDisplacementMap in="SourceGraphic" in2="noise1" scale="2.4" result="displaced"/>
-    <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="3" seed="11" result="blotch"/>
-    <feColorMatrix in="blotch" type="matrix"
-      values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.4 0.4 0.4 0 -0.35" result="blotchAlpha"/>
-    <feComposite in="displaced" in2="blotchAlpha" operator="in" result="patchy"/>
-    <feMerge>
-      <feMergeNode in="displaced"/>
-      <feMergeNode in="patchy"/>
-    </feMerge>
-  </filter>
-</svg>
 <div class="wrap">
 
   <header class="app-head">
@@ -458,10 +409,6 @@
             <span id="rIssuerReg"></span>
           </div>
           <div class="r-side">
-            <div>
-              <div class="r-qr" id="qrHolder"></div>
-              <div class="r-qr-cap">スキャンで内容確認</div>
-            </div>
             <div class="hanko" id="hanko">
               <div class="hanko-text" id="hankoText" data-len="2">受領</div>
             </div>
@@ -483,7 +430,7 @@
           </div>
           <div class="sf-option" data-fmt="cloud" onclick="selectFormat('cloud')">
             <div class="sf-title"><span class="sf-dot"></span>電子データ保存（電帳法）</div>
-            <div class="sf-desc">PDFをクラウド保存し、QRで検証情報を紐付け</div>
+            <div class="sf-desc">PDFをクラウド保存して電子帳簿保存法に対応</div>
           </div>
           <div class="sf-option" data-fmt="print" onclick="selectFormat('print')">
             <div class="sf-title"><span class="sf-dot"></span>その場で手渡し印刷</div>
@@ -501,7 +448,6 @@
         </div>
         <div class="btn-row">
           <button class="act" id="btnPdf" onclick="exportPDF()" disabled>PDFを出力</button>
-          <button class="act" id="btnQr" onclick="regenQR()" disabled>QRコードを再生成</button>
           <button class="act ghost" id="btnPrint" onclick="printReceipt()" disabled>印刷する</button>
         </div>
       </div>
@@ -512,6 +458,7 @@
           <h2>発行履歴</h2>
           <button class="history-clear" type="button" onclick="clearHistory()">すべて削除</button>
         </div>
+        <div class="rec-guide" id="historySaveStatus" style="margin-bottom:4px;"></div>
         <div class="rec-guide" id="historyTotal" style="margin-bottom:12px;"></div>
         <div class="history-list" id="historyList">
           <div class="history-empty">まだ発行履歴はありません。「発行して確定」すると自動的にここへ記録されます。</div>
@@ -663,7 +610,7 @@ function update(){
   hankoEl.textContent = hname;
   hankoEl.setAttribute('data-len', String(hname.length));
 
-  if(issued){ generateQR(); }
+
 }
 
 ['toName','amount','taxRate','purpose','issueDate','issuerName','issuerAddr','issuerContact','issuerReg']
@@ -677,7 +624,7 @@ function selectFormat(fmt){
   const guides = {
     email: '推奨アクション：PDFを出力してメールに添付してください。',
     paper: '推奨アクション：印刷して押印のうえ、原本を提出してください。',
-    cloud: '推奨アクション：PDFを出力し、QRコードとあわせてクラウド保存してください（電子帳簿保存法対応）。',
+    cloud: '推奨アクション：PDFを出力し、クラウド保存してください（電子帳簿保存法対応）。',
     print: '推奨アクション：その場で印刷ボタンを押し、控えを手渡してください。'
   };
   $('formatGuide').textContent = guides[fmt];
@@ -692,33 +639,9 @@ async function issueReceipt(){
   $('issueStatus').textContent = '発行済み';
   $('issueStatus').style.borderColor = 'var(--stamp)';
   $('issueStatus').style.color = 'var(--stamp)';
-  $('hanko').classList.remove('stamped');
-  void $('hanko').offsetWidth; // アニメーションを再トリガーするためのリフロー
   $('hanko').classList.add('stamped');
-  spawnInkSparks();
-  ['btnPdf','btnQr','btnPrint'].forEach(id => $(id).disabled = false);
-  generateQR();
+  ['btnPdf','btnPrint'].forEach(id => $(id).disabled = false);
   await recordToHistory();
-}
-
-function spawnInkSparks(){
-  const hanko = $('hanko');
-  const n = 7;
-  for(let i=0;i<n;i++){
-    const dot = document.createElement('div');
-    dot.className = 'ink-spark';
-    const size = 3 + Math.random()*4;
-    const angle = Math.random()*Math.PI*2;
-    const dist = 18 + Math.random()*22;
-    dot.style.width = size + 'px';
-    dot.style.height = size + 'px';
-    dot.style.left = (50 + Math.random()*20 - 10) + '%';
-    dot.style.top = (50 + Math.random()*20 - 10) + '%';
-    dot.style.setProperty('--sx', (Math.cos(angle)*dist) + 'px');
-    dot.style.setProperty('--sy', (Math.sin(angle)*dist) + 'px');
-    hanko.appendChild(dot);
-    setTimeout(() => dot.remove(), 550);
-  }
 }
 
 const HISTORY_KEY = 'receipt-history';
@@ -759,8 +682,18 @@ async function recordToHistory(){
 
     await storageAdapter.set(HISTORY_KEY, JSON.stringify(list), false);
     renderHistory(list);
+    const statusEl = $('historySaveStatus');
+    if(statusEl){
+      statusEl.textContent = '履歴に保存しました（' + list.length + '件）';
+      statusEl.style.color = '';
+    }
   } catch(err){
     console.error('履歴の保存に失敗しました:', err);
+    const statusEl = $('historySaveStatus');
+    if(statusEl){
+      statusEl.textContent = '履歴の保存に失敗：' + (err && err.message ? err.message : String(err));
+      statusEl.style.color = 'var(--stamp)';
+    }
   }
 }
 
@@ -842,7 +775,7 @@ async function loadFromHistory(no){
     $('issueStatus').style.borderColor = 'var(--stamp)';
     $('issueStatus').style.color = 'var(--stamp)';
     $('hanko').classList.add('stamped');
-    ['btnPdf','btnQr','btnPrint'].forEach(id => $(id).disabled = false);
+    ['btnPdf','btnPrint'].forEach(id => $(id).disabled = false);
 
     update();
     window.scrollTo({ top: 0, behavior:'smooth' });
@@ -919,23 +852,10 @@ function newDraft(){
   $('issueStatus').style.borderColor = '';
   $('issueStatus').style.color = '';
   $('hanko').classList.remove('stamped');
-  ['btnPdf','btnQr','btnPrint'].forEach(id => $(id).disabled = true);
-  $('qrHolder').innerHTML = '';
+  ['btnPdf','btnPrint'].forEach(id => $(id).disabled = true);
 
   update();
 }
-
-function generateQR(){
-  const holder = $('qrHolder');
-  holder.innerHTML = '';
-  const name = $('toName').value.trim() || '未入力';
-  const amt = $('rAmount').textContent;
-  const dt = $('rDate').textContent;
-  const issuer = $('issuerName').value.trim() || '未入力';
-  const text = '領収書 No.' + receiptNo + '\n発行日: ' + dt + '\n宛名: ' + name + suffix + '\n金額: ¥' + amt + '\n発行者: ' + issuer;
-  new QRCode(holder, { text: text, width: 130, height: 130, correctLevel: QRCode.CorrectLevel.M });
-}
-function regenQR(){ generateQR(); }
 
 function printReceipt(){
   window.print();
